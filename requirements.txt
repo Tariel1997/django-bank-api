@@ -11,6 +11,7 @@ djangorestframework_simplejwt==5.5.1
 djlint==1.36.4
 drf-spectacular==0.29.0
 EditorConfig==0.17.1
+gunicorn==25.0.2
 inflection==0.5.1
 jsbeautifier==1.15.4
 json5==0.13.0
