@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
 from .models import BankAccount, Transaction
+from decimal import Decimal
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -27,18 +28,40 @@ class BankAccountSerializer(serializers.ModelSerializer):
 class TransactionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Transaction
-        fields = ["id", "transaction_type", "amount", "description", "created_at"]
+        fields = [
+            "id",
+            "transaction_type",
+            "amount",
+            "category",
+            "description",
+            "created_at",
+        ]
         read_only_fields = ["id", "transaction_type", "created_at"]
 
 
 class DepositSerializer(serializers.Serializer):
-    amount = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=0.01)
+    amount = serializers.DecimalField(
+        max_digits=12, decimal_places=2, min_value=Decimal("0.01")
+    )
+    category = serializers.ChoiceField(
+        choices=Transaction.CATEGORY_CHOICES, default="OTHER"
+    )
 
 
 class WithdrawSerializer(serializers.Serializer):
-    amount = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=0.01)
+    amount = serializers.DecimalField(
+        max_digits=12, decimal_places=2, min_value=Decimal("0.01")
+    )
+    category = serializers.ChoiceField(
+        choices=Transaction.CATEGORY_CHOICES, default="OTHER"
+    )
 
 
 class TransferSerializer(serializers.Serializer):
     recipient_username = serializers.CharField(max_length=150)
-    amount = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=0.01)
+    amount = serializers.DecimalField(
+        max_digits=12, decimal_places=2, min_value=Decimal("0.01")
+    )
+    category = serializers.ChoiceField(
+        choices=Transaction.CATEGORY_CHOICES, default="OTHER"
+    )

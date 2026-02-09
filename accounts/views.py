@@ -4,6 +4,8 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.contrib.auth.models import User
 from django.db import transaction
+from django.db.models import Sum
+from django_filters.rest_framework import DjangoFilterBackend
 from .models import BankAccount, Transaction
 from drf_spectacular.utils import extend_schema
 from .serializers import (
@@ -26,13 +28,13 @@ class RegisterView(generics.CreateAPIView):
 
     def perform_create(self, serializer):
         user = serializer.save()
-        BankAccount.objects.create(user=user)  # type: ignore
+        BankAccount.objects.create(user=user)
 
 
 @extend_schema(tags=["Account"], description="Get current user bank account details")
 class AccountDetailView(generics.RetrieveAPIView):
     serializer_class = BankAccountSerializer
-    permissions_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated]
 
     def get_object(self):
         return self.request.user.bank_account
@@ -50,13 +52,13 @@ class DepositView(APIView):
         serializer = DepositSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        amount = serializer.validated_data["amount"]  # type: ignore
+        amount = serializer.validated_data["amount"]
         account = request.user.bank_account
 
         account.balance += amount
         account.save()
 
-        Transaction.objects.create(  # type: ignore
+        Transaction.objects.create(
             account=account,
             transaction_type="DEPOSIT",
             amount=amount,
@@ -80,7 +82,7 @@ class WithdrawView(APIView):
         serializer = WithdrawSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        amount = serializer.validated_data["amount"]  # type: ignore
+        amount = serializer.validated_data["amount"]
         account = request.user.bank_account
 
         if account.balance < amount:
@@ -91,7 +93,7 @@ class WithdrawView(APIView):
         account.balance -= amount
         account.save()
 
-        Transaction.objects.create(  # type: ignore
+        Transaction.objects.create(
             account=account,
             transaction_type="WITHDRAWAL",
             amount=amount,
@@ -115,8 +117,9 @@ class TransferView(APIView):
         serializer = TransferSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        amount = serializer.validated_data["amount"]  # type: ignore
-        recipient_username = serializer.validated_data["recipient_username"]  # type: ignore
+        amount = serializer.validated_data["amount"]
+        recipient_username = serializer.validated_data["recipient_username"]
+        category = serializer.validated_data["category"]
 
         sender_account = request.user.bank_account
 
@@ -128,7 +131,7 @@ class TransferView(APIView):
 
         try:
             recipient = User.objects.get(username=recipient_username)
-        except User.DoesNotExist:  # type: ignore
+        except User.DoesNotExist:
             return Response(
                 {"error": "Recipient not found"}, status=status.HTTP_404_NOT_FOUND
             )
@@ -140,24 +143,26 @@ class TransferView(APIView):
 
         recipient_account = recipient.bank_account
 
-        with transaction.atomic():  # type: ignore
+        with transaction.atomic():
             sender_account.balance -= amount
             sender_account.save()
 
             recipient_account.balance += amount
             recipient_account.save()
 
-            Transaction.objects.create(  # type: ignore
+            Transaction.objects.create(
                 account=sender_account,
                 transaction_type="TRANSFER_OUT",
                 amount=amount,
+                category=category,
                 description=f"Transfer to {recipient_username}",
             )
 
-            Transaction.objects.create(  # type: ignore
+            Transaction.objects.create(
                 account=recipient_account,
                 transaction_type="TRANSFER_IN",
                 amount=amount,
+                category="OTHER",
                 description=f"Transfer from {request.user.username}",
             )
 
@@ -173,8 +178,28 @@ class TransferView(APIView):
 class TransactionHistoryView(generics.ListAPIView):
     serializer_class = TransactionSerializer
     permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["transaction_type", "category"]
 
     def get_queryset(self):
-        return Transaction.objects.filter(  # type: ignore
+        return Transaction.objects.filter(
             account=self.request.user.bank_account
         ).order_by("-created_at")
+
+
+@extend_schema(tags=["Analytics"], description="Spending summary by category")
+class SpendingSummaryView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        summary = (
+            Transaction.objects.filter(
+                account=request.user.bank_account,
+                transaction_type__in=["WITHDRAWAL", "TRANSFER_OUT"],
+            )
+            .values("category")
+            .annotate(total_spent=Sum("amount"))
+            .order_by("-total_spent")
+        )
+
+        return Response(summary)
