@@ -24,11 +24,23 @@ class Transaction(models.Model):
         ("TRANSFER_OUT", "Transfer Out"),
     ]
 
+    CATEGORY_CHOICES = [
+        ("FOOD", "Food & Drinks"),
+        ("TRANSPORT", "Transport"),
+        ("BILLS", "Utilities/Bills"),
+        ("SHOPPING", "Shopping"),
+        ("SALARY", "Salary"),
+        ("OTHER", "Other"),
+    ]
+
     account = models.ForeignKey(
         BankAccount, on_delete=models.CASCADE, related_name="transactions"
     )
     transaction_type = models.CharField(max_length=15, choices=TRANSACTION_TYPES)
     amount = models.DecimalField(max_digits=12, decimal_places=2)
+    category = models.CharField(
+        max_length=20, choices=CATEGORY_CHOICES, default="OTHER"
+    )
     description = models.CharField(max_length=255, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
